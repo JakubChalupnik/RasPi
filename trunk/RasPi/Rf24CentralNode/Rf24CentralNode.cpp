@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <time.h>
 #include "Rf24PacketDefine.h"
+#include "T6963Lcd.h"
 
 #define THIS_NODE 00    // Address of our node in Octal format. This is main router, thus 00
 #define MAX_NODE_COUNT 32
@@ -77,6 +78,14 @@ void setup (void) {
   //
   
   memset (Nodes, 0, sizeof (Nodes));
+  
+  //
+  // LCD stuff
+  //
+  
+  MainLcdInit ();
+  LcdGotoXY (0, 0);
+  lprint ("Hello world");
 } 
 
 //*******************************************************************************
@@ -89,6 +98,7 @@ void loop (void) {
   RF24NetworkHeader Header;        // If so, grab it and print it out
   PayloadTemperature_t *Payload;
   uint8_t i;
+  char s[256];
   
   PayloadId_t *PayloadId;
   uint8_t Buffer[32];
@@ -96,8 +106,6 @@ void loop (void) {
   Payload = (PayloadTemperature_t *) Buffer;
   PayloadId = (PayloadId_t *) Buffer;
 
-//  printf ("Loop\n");
-  
   //
   // Things that have to be done every loop pass
   //
@@ -138,8 +146,15 @@ void loop (void) {
       NodeCount++;
     }
 
+	LcdGotoXY (0, 0);
+	sprintf (s, "Packets: %d\n", PacketCounter);
+	lprint (s);
+	
 	for (i = 0; i < NodeCount; i++) {
 		printf ("%3.3o: %8s %4dmV %4dC\n", Nodes [i].Address, Nodes [i].Id, Nodes [i].BattLevel + 2, Nodes [i].Temperature [0]);
+		sprintf (s, "%3.3o: %8s %4dmV %4dC\n", Nodes [i].Address, Nodes [i].Id, Nodes [i].BattLevel + 2, Nodes [i].Temperature [0]);
+		LcdGotoXY (0, i + 1);
+		lprint (s);
 	}
   }
 }
