@@ -20,11 +20,16 @@ CCFLAGS=-Ofast -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s
 # define all programs
 PROGRAMS = Rf24CentralNode
 SOURCES = ${PROGRAMS:=.cpp}
+SRC = T6963/main.cpp T6963/lcd_register.cpp T6963/gpio.cpp T6963/lcd_command.cpp T6963/lcd_controller.cpp T6963/lcd_graphics.cpp T6963/lcd_screen.cpp 
+#OBJ = $(SRC:.cpp=.o)
 
 all: ${PROGRAMS}
 
-${PROGRAMS}: ${SOURCES}
-	g++ ${CCFLAGS} -Wall -I../ -lrf24-bcm -lrf24network $@.cpp -o $@
+#%.o : %.cpp
+#	$(CC) -c $(ALL_CFLAGS) $< -o $@
+
+${PROGRAMS}: ${SOURCES} ${SRC}
+	g++ ${CCFLAGS} -Wall -I../ -lrf24-bcm -lrf24network -lm $@.cpp ${SRC} -o $@
 
 clean:
 	rm -rf $(PROGRAMS)
