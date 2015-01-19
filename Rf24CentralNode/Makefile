@@ -1,44 +1,57 @@
-#############################################################################
-#
-# Makefile for librf24 examples on Raspberry Pi
-#
-# License: GPL (General Public License)
-# Author:  gnulnulf <arco@appeltaart.mine.nu>
-# Date:    2013/02/07 (version 1.0)
-#
-# Description:
-# ------------
-# use make all and make install to install the examples
-# You can change the install directory by editing the prefix line
-#
-prefix := /usr/local
+# define the C compiler to use
+CC = g++
 
 # The recommended compiler flags for the Raspberry Pi
 CCFLAGS=-Ofast -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s
-#CCFLAGS=
 
-# define all programs
-PROGRAMS = Rf24CentralNode
-SOURCES = ${PROGRAMS:=.cpp}
-SRC = T6963/main.cpp T6963/lcd_register.cpp T6963/gpio.cpp T6963/lcd_command.cpp T6963/lcd_controller.cpp T6963/lcd_graphics.cpp T6963/lcd_screen.cpp 
-#OBJ = $(SRC:.cpp=.o)
+# define any directories containing header files other than /usr/include
+INCLUDES = -I../
 
-all: ${PROGRAMS}
+# define any libraries to link into executable:
+LIBS = -lm -lrf24-bcm -lrf24network
 
-#%.o : %.cpp
-#	$(CC) -c $(ALL_CFLAGS) $< -o $@
+# define the C source files
+SRCS = Rf24CentralNode.cpp T6963/main.cpp T6963/lcd_register.cpp T6963/gpio.cpp T6963/lcd_command.cpp T6963/lcd_controller.cpp T6963/lcd_graphics.cpp T6963/lcd_screen.cpp 
 
-${PROGRAMS}: ${SOURCES} ${SRC}
-	g++ ${CCFLAGS} -Wall -I../ -lrf24-bcm -lrf24network -lm $@.cpp ${SRC} -o $@
+# define the C object files 
+#
+# This uses Suffix Replacement within a macro:
+#   $(name:string1=string2)
+#         For each word in 'name' replace 'string1' with 'string2'
+# Below we are replacing the suffix .cpp of all words in the macro SRCS
+# with the .o suffix
+#
+OBJS = $(SRCS:.cpp=.o)
+
+# define the executable file 
+MAIN = prog
+
+
+#
+# The following part of the makefile is generic; it can be used to 
+# build any executable just by changing the definitions above and by
+# deleting dependencies appended to the file from 'make depend'
+#
+
+.PHONY: depend clean
+
+all:    $(MAIN)
+
+$(MAIN): $(OBJS) 
+	$(CC) $(CFLAGS) $(INCLUDES) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
+
+# this is a suffix replacement rule for building .o's from .c's
+# it uses automatic variables $<: the name of the prerequisite of
+# the rule(a .c file) and $@: the name of the target of the rule (a .o file) 
+# (see the gnu make manual section about automatic variables)
+.c.o:
+	$(CC) $(CFLAGS) $(INCLUDES) -c $<  -o $@
 
 clean:
-	rm -rf $(PROGRAMS)
+	$(RM) *.o *~ $(MAIN) T6963/*.o
 
-install: all
-	test -d $(prefix) || mkdir $(prefix)
-	test -d $(prefix)/bin || mkdir $(prefix)/bin
-	for prog in $(PROGRAMS); do \
-	  install -m 0755 $$prog $(prefix)/bin; \
-	done
+depend: $(SRCS)
+	makedepend $(INCLUDES) $^
 
-.PHONY: install
+# DO NOT DELETE THIS LINE -- make depend needs it
+
