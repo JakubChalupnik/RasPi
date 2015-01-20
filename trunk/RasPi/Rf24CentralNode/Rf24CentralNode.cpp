@@ -40,7 +40,7 @@ typedef struct {
   uint16_t Address;
   uint8_t BattLevel;
   uint8_t Temperature[4];
-  char Id[8];
+  char Id[NODE_ID_SIZE];
   uint16_t Flags;
 } Node_t;
    
@@ -56,6 +56,38 @@ RF24 Radio (RPI_V2_GPIO_P1_22, BCM2835_SPI_CS0, BCM2835_SPI_SPEED_8MHZ);
 RF24Network Network (Radio);    // Network uses that radio
 Node_t Nodes [MAX_NODE_COUNT];
 uint8_t NodeCount = 0; 
+
+//*******************************************************************************
+//*                               Sensor node methods                           *
+//*******************************************************************************
+ 
+const char *NodeBatteryType (Node_t *Node) {
+	
+	switch (Node->Flags & F_BATTERY_MASK) {
+		case F_BATTERY_NONE:
+			return "None ";
+		case F_BATTERY_CR2032:
+			return "Li   ";
+		case F_BATTERY_LIION:
+			return "LiIon";
+		default:
+			return "Other";
+	}
+}
+
+const char *NodeTempSensorType (Node_t *Node) {
+	
+	switch (Node->Flags & F_SENSOR_MASK) {
+		case F_SENSOR_NONE:
+			return "None  ";
+		case F_SENSOR_DS1820:
+			return "DS1820";
+		case F_SENSOR_DS1822:
+			return "DS1822";
+		default:
+			return "Other ";
+	}
+}
 
 //*******************************************************************************
 //*                            Arduino setup method                             *
@@ -84,8 +116,6 @@ void setup (void) {
   //
   
   MainLcdInit ();
-  LcdGotoXY (0, 0);
-  lprint ("Hello world");
 } 
 
 //*******************************************************************************
@@ -151,8 +181,8 @@ void loop (void) {
 	lprint (s);
 	
 	for (i = 0; i < NodeCount; i++) {
-		printf ("%3.3o: %8s %4dmV %4dC\n", Nodes [i].Address, Nodes [i].Id, Nodes [i].BattLevel + 2, Nodes [i].Temperature [0]);
-		sprintf (s, "%3.3o: %8s %4dmV %4dC\n", Nodes [i].Address, Nodes [i].Id, Nodes [i].BattLevel + 2, Nodes [i].Temperature [0]);
+		sprintf (s, "%3.3o %*s %4dmV %3dC %s %s", Nodes [i].Address, NODE_ID_SIZE, Nodes [i].Id, Nodes [i].BattLevel * 10 + 2000, Nodes [i].Temperature [0], NodeBatteryType (&Nodes [i]), NodeTempSensorType (&Nodes [i]));
+		printf ("%s\n", s);
 		LcdGotoXY (0, i + 1);
 		lprint (s);
 	}
