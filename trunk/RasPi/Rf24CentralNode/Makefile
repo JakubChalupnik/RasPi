@@ -21,11 +21,10 @@ SRCS = Rf24CentralNode.cpp T6963/main.cpp T6963/lcd_register.cpp T6963/gpio.cpp 
 # Below we are replacing the suffix .cpp of all words in the macro SRCS
 # with the .o suffix
 #
-OBJS = $(SRCS:.cpp=.o)
+OBJS = $(SRCS:.cpp=.o) 
 
 # define the executable file 
 MAIN = prog
-
 
 #
 # The following part of the makefile is generic; it can be used to 
@@ -39,12 +38,14 @@ all:    $(MAIN)
 
 $(MAIN): $(OBJS) 
 	$(CC) $(CFLAGS) $(INCLUDES) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
+	
+Rf24CentralNode.o: Rf24CentralNode.cpp Rf24PacketDefine.h
 
 # this is a suffix replacement rule for building .o's from .c's
 # it uses automatic variables $<: the name of the prerequisite of
 # the rule(a .c file) and $@: the name of the target of the rule (a .o file) 
 # (see the gnu make manual section about automatic variables)
-.c.o:
+.cpp.o: 
 	$(CC) $(CFLAGS) $(INCLUDES) -c $<  -o $@
 
 clean:

@@ -39,7 +39,7 @@
 typedef struct {
   uint16_t Address;
   uint8_t BattLevel;
-  uint8_t Temperature[4];
+  uint16_t Temperature[2];
   char Id[NODE_ID_SIZE];
   uint16_t Flags;
 } Node_t;
@@ -53,6 +53,7 @@ typedef struct {
 //
 
 RF24 Radio (RPI_V2_GPIO_P1_22, BCM2835_SPI_CS0, BCM2835_SPI_SPEED_8MHZ);  
+
 RF24Network Network (Radio);    // Network uses that radio
 Node_t Nodes [MAX_NODE_COUNT];
 uint8_t NodeCount = 0; 
@@ -65,13 +66,15 @@ const char *NodeBatteryType (Node_t *Node) {
 	
 	switch (Node->Flags & F_BATTERY_MASK) {
 		case F_BATTERY_NONE:
-			return "None ";
+			return "None  ";
 		case F_BATTERY_CR2032:
-			return "Li   ";
+			return "CR2032";
 		case F_BATTERY_LIION:
-			return "LiIon";
+			return "LiIon ";
+		case F_BATTERY_SOLAR:
+			return "Solar ";
 		default:
-			return "Other";
+			return "Other ";
 	}
 }
 
@@ -86,6 +89,19 @@ const char *NodeTempSensorType (Node_t *Node) {
 			return "DS1822";
 		default:
 			return "Other ";
+	}
+}
+
+//*******************************************************************************
+//*                            Debug methods                                    *
+//******************************************************************************* 
+
+void PrintBuffer (uint8_t *Buffer, int BufferSize) {
+
+	while (BufferSize > 0) {
+		BufferSize--;
+		printf ("%2.2X ", *Buffer);
+		Buffer++;
 	}
 }
 
@@ -146,6 +162,7 @@ void loop (void) {
     Network.read (Header, &Buffer, sizeof (Buffer));
     PacketCounter++;
 	printf ("Packets: %d\n", PacketCounter);
+	// PrintBuffer (Buffer, sizeof (Buffer));
     
     for (i = 0; i < NodeCount; i++) {
       if (Header.from_node == Nodes [i].Address) {
@@ -159,12 +176,10 @@ void loop (void) {
       case RF24_TYPE_TEMP:
         Nodes [i].Temperature [0] = Payload->Temperature [0];
         Nodes [i].Temperature [1] = Payload->Temperature [1];
-        Nodes [i].Temperature [2] = Payload->Temperature [2];
-        Nodes [i].Temperature [3] = Payload->Temperature [3];
         break;
         
       case RF24_TYPE_ID:
-        memcpy (Nodes [i].Id, PayloadId->Id, 8);
+        memcpy (Nodes [i].Id, PayloadId->Id, NODE_ID_SIZE);
         Nodes [i].Flags = PayloadId->Flags;
         break;
         
@@ -177,11 +192,11 @@ void loop (void) {
     }
 
 	LcdGotoXY (0, 0);
-	sprintf (s, "Packets: %d\n", PacketCounter);
+	sprintf (s, "Packets: %d nodesize %d\n", PacketCounter, NODE_ID_SIZE);
 	lprint (s);
 	
 	for (i = 0; i < NodeCount; i++) {
-		sprintf (s, "%3.3o %*s %4dmV %3dC %s %s", Nodes [i].Address, NODE_ID_SIZE, Nodes [i].Id, Nodes [i].BattLevel * 10 + 2000, Nodes [i].Temperature [0], NodeBatteryType (&Nodes [i]), NodeTempSensorType (&Nodes [i]));
+		sprintf (s, "%3.3o %*s %4.2fV %+3dC %s %s", Nodes [i].Address, NODE_ID_SIZE, Nodes [i].Id, (Nodes [i].BattLevel * 10 + 2000) / 1000.0, (((int16_t) Nodes [i].Temperature [0]) + 5) / 10, NodeBatteryType (&Nodes [i]), NodeTempSensorType (&Nodes [i]));
 		printf ("%s\n", s);
 		LcdGotoXY (0, i + 1);
 		lprint (s);
