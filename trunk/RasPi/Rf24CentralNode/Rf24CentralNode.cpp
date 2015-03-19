@@ -8,6 +8,7 @@
 //* Author      Date       Comment
 //*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //* Kubik       19.1.2015 First version, just basic code for HW tests
+//* Kubik       10.2.2015 Switched over to ncurses and abandoning the T6963C 
 //******************************************************************************* 
 
 //*******************************************************************************
@@ -29,8 +30,8 @@
 #include <ctime>
 #include <stdio.h>
 #include <time.h>
+#include <ncurses.h>
 #include "Rf24PacketDefine.h"
-#include "T6963Lcd.h"
 
 #define THIS_NODE 00    // Address of our node in Octal format. This is main router, thus 00
 #define MAX_NODE_COUNT 32
@@ -57,6 +58,8 @@ RF24 Radio (RPI_V2_GPIO_P1_22, BCM2835_SPI_CS0, BCM2835_SPI_SPEED_8MHZ);
 RF24Network Network (Radio);    // Network uses that radio
 Node_t Nodes [MAX_NODE_COUNT];
 uint8_t NodeCount = 0; 
+
+int ScrRow, ScrCol;
 
 //*******************************************************************************
 //*                               Sensor node methods                           *
@@ -100,7 +103,7 @@ void PrintBuffer (uint8_t *Buffer, int BufferSize) {
 
 	while (BufferSize > 0) {
 		BufferSize--;
-		printf ("%2.2X ", *Buffer);
+		// printw ("%2.2X ", *Buffer);
 		Buffer++;
 	}
 }
@@ -111,8 +114,6 @@ void PrintBuffer (uint8_t *Buffer, int BufferSize) {
 
 void setup (void) {
   
-  printf ("[RF24RouterNode]\n");
- 
   //
   // RF24Network init
   //
@@ -128,10 +129,11 @@ void setup (void) {
   memset (Nodes, 0, sizeof (Nodes));
   
   //
-  // LCD stuff
+  // ncurses stuff
   //
   
-  MainLcdInit ();
+  initscr ();
+  getmaxyx (stdscr, ScrRow, ScrCol);		// get the number of rows and columns 
 } 
 
 //*******************************************************************************
@@ -161,8 +163,8 @@ void loop (void) {
   while (Network.available ()) {     // Is there anything ready for us?
     Network.read (Header, &Buffer, sizeof (Buffer));
     PacketCounter++;
-	printf ("Packets: %d\n", PacketCounter);
-	// PrintBuffer (Buffer, sizeof (Buffer));
+	mvprintw (0, 0, "Packets: %d\n", PacketCounter);
+	PrintBuffer (Buffer, sizeof (Buffer));
     
     for (i = 0; i < NodeCount; i++) {
       if (Header.from_node == Nodes [i].Address) {
@@ -191,16 +193,16 @@ void loop (void) {
       NodeCount++;
     }
 
-	LcdGotoXY (0, 0);
-	sprintf (s, "Packets: %d nodesize %d\n", PacketCounter, NODE_ID_SIZE);
-	lprint (s);
+	// LcdGotoXY (0, 0);
+	// sprintf (s, "Packets: %d nodesize %d\n", PacketCounter, NODE_ID_SIZE);
+	// lprint (s);
 	
 	for (i = 0; i < NodeCount; i++) {
 		sprintf (s, "%3.3o %*s %4.2fV %+3dC %s %s", Nodes [i].Address, NODE_ID_SIZE, Nodes [i].Id, (Nodes [i].BattLevel * 10 + 2000) / 1000.0, (((int16_t) Nodes [i].Temperature [0]) + 5) / 10, NodeBatteryType (&Nodes [i]), NodeTempSensorType (&Nodes [i]));
-		printf ("%s\n", s);
-		LcdGotoXY (0, i + 1);
-		lprint (s);
+		move (i + 1, 0);
+		printw ("%s\n", s);
 	}
+	refresh ();
   }
 }
 
