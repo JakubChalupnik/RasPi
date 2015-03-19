@@ -2,16 +2,17 @@
 CC = g++
 
 # The recommended compiler flags for the Raspberry Pi
-CCFLAGS=-Ofast -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s
+CFLAGS=-Ofast -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s -ggdb -O0
 
 # define any directories containing header files other than /usr/include
 INCLUDES = -I../
 
 # define any libraries to link into executable:
-LIBS = -lm -lrf24-bcm -lrf24network
+LIBS = -lm -lrf24-bcm -lrf24network -lncurses
 
 # define the C source files
-SRCS = Rf24CentralNode.cpp T6963/main.cpp T6963/lcd_register.cpp T6963/gpio.cpp T6963/lcd_command.cpp T6963/lcd_controller.cpp T6963/lcd_graphics.cpp T6963/lcd_screen.cpp 
+SRCS = Rf24CentralNode.cpp 
+#T6963/main.cpp T6963/lcd_register.cpp T6963/gpio.cpp T6963/lcd_command.cpp T6963/lcd_controller.cpp T6963/lcd_graphics.cpp T6963/lcd_screen.cpp 
 
 # define the C object files 
 #
