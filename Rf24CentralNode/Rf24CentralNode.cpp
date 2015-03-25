@@ -9,6 +9,7 @@
 //*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //* Kubik       19.1.2015 First version, just basic code for HW tests
 //* Kubik       10.2.2015 Switched over to ncurses and abandoning the T6963C 
+//* Kubik       19.3.2015 Migrated to RF24Radio for sensors 
 //******************************************************************************* 
 
 //*******************************************************************************
@@ -33,17 +34,12 @@
 #include <ncurses.h>
 #include "Rf24PacketDefine.h"
 
-#define THIS_NODE 00    // Address of our node in Octal format. This is main router, thus 00
-#define MAX_NODE_COUNT 32
+#define MAX_SENSORS 32
   
-
 typedef struct {
-  uint16_t Address;
-  uint8_t BattLevel;
-  uint16_t Temperature[2];
-  char Id[NODE_ID_SIZE];
-  uint16_t Flags;
-} Node_t;
+  SensorPayload_t Payload;
+  time_t LastReport;
+} SensorNode_t;
    
 //*******************************************************************************
 //*                               Static variables                              *
@@ -55,9 +51,9 @@ typedef struct {
 
 RF24 Radio (RPI_V2_GPIO_P1_22, BCM2835_SPI_CS0, BCM2835_SPI_SPEED_8MHZ);  
 
-RF24Network Network (Radio);    // Network uses that radio
-Node_t Nodes [MAX_NODE_COUNT];
-uint8_t NodeCount = 0; 
+// RF24Network Network (Radio);    // Network uses that radio
+SensorNode_t Sensors [MAX_SENSORS];
+uint8_t SensorsCount = 0; 
 
 int ScrRow, ScrCol;
 
@@ -65,48 +61,96 @@ int ScrRow, ScrCol;
 //*                               Sensor node methods                           *
 //*******************************************************************************
  
-const char *NodeBatteryType (Node_t *Node) {
+// const char *NodeBatteryType (Node_t *Node) {
 	
-	switch (Node->Flags & F_BATTERY_MASK) {
-		case F_BATTERY_NONE:
-			return "None  ";
-		case F_BATTERY_CR2032:
-			return "CR2032";
-		case F_BATTERY_LIION:
-			return "LiIon ";
-		case F_BATTERY_SOLAR:
-			return "Solar ";
-		default:
-			return "Other ";
-	}
-}
+	// switch (Node->Flags & F_BATTERY_MASK) {
+		// case F_BATTERY_NONE:
+			// return "None  ";
+		// case F_BATTERY_CR2032:
+			// return "CR2032";
+		// case F_BATTERY_LIION:
+			// return "LiIon ";
+		// case F_BATTERY_SOLAR:
+			// return "Solar ";
+		// default:
+			// return "Other ";
+	// }
+// }
 
-const char *NodeTempSensorType (Node_t *Node) {
+// const char *NodeTempSensorType (Node_t *Node) {
 	
-	switch (Node->Flags & F_SENSOR_MASK) {
-		case F_SENSOR_NONE:
-			return "None  ";
-		case F_SENSOR_DS1820:
-			return "DS1820";
-		case F_SENSOR_DS1822:
-			return "DS1822";
-		default:
-			return "Other ";
-	}
-}
+	// switch (Node->Flags & F_SENSOR_MASK) {
+		// case F_SENSOR_NONE:
+			// return "None  ";
+		// case F_SENSOR_DS1820:
+			// return "DS1820";
+		// case F_SENSOR_DS1822:
+			// return "DS1822";
+		// default:
+			// return "Other ";
+	// }
+// }
 
 //*******************************************************************************
 //*                            Debug methods                                    *
 //******************************************************************************* 
 
-void PrintBuffer (uint8_t *Buffer, int BufferSize) {
+char *PrintBuffer (uint8_t *Buffer, int BufferSize) {
+  static char buff[256];
+	char *b = buff;
 
 	while (BufferSize > 0) {
 		BufferSize--;
-		// printw ("%2.2X ", *Buffer);
+		b += sprintf (b, "%2.2X ", *Buffer);
 		Buffer++;
 	}
+	
+	return buff;
 }
+
+//*******************************************************************************
+//*                            Screen output helpers                            *
+//******************************************************************************* 
+
+char *PayloadToString (int Index) {
+  static char Buffer[64];
+  char *b;
+  SensorPayload_t *p = &Sensors[Index].Payload;
+
+  b = Buffer + sprintf (Buffer, "%c%c ", (char) (p->SensorId >> 8), (char) (p->SensorId & 0xFF));
+  
+  if (p->BattLevel == 255) {
+    b += sprintf (b, "NoBat  ");
+  } else if (p->BattLevel == 0) {
+    b += sprintf (b, "BatLow ");
+  } else {
+    b += sprintf (b, "%4.2fV  ", p->BattLevel * 0.010 + 2.0);
+  }
+  
+  switch (p->PacketType) {
+    case RF24_SENSOR_TYPE_TEMP:
+      b += sprintf (b, "%5.1fC ", (p->TemperatureInt + 0.05) / 10.0); 
+      if (p->TemperatureExt < 65535) {
+        b += sprintf (b, "%5.1fC ", (p->TemperatureExt + 0.05) / 10.0); 
+      }
+      break;
+      
+    case RF24_SENSOR_TYPE_METEO:
+      b += sprintf (b, "%5.1fC %4dhPa %2d%%", (p->Temperature + 0.05) / 10.0, p->Pressure, p->Humidity); 
+      break;
+      
+    case RF24_SENSOR_TYPE_SOLAR:
+      b += sprintf (b, "%5.2fV %5.2fW", p->SolarVoltage / 1000.0, p->SolarPower / 100.0); 
+      break;
+      
+    default:
+      break;
+  }
+  
+  return Buffer;
+}
+
+FILE *LogFile;
 
 //*******************************************************************************
 //*                            Arduino setup method                             *
@@ -119,14 +163,22 @@ void setup (void) {
   //
   
   Radio.begin ();
-  Network.begin (RF24_CHANNEL, THIS_NODE);
-  Radio.printDetails();
+	
+	Radio.setPayloadSize (sizeof (SensorPayloadTemperature_t));
+  Radio.setAutoAck (false);
+  Radio.setPALevel (RF24_PA_HIGH);
+  Radio.setDataRate (RF24_250KBPS);
+  Radio.setChannel (RF24_RADIO_CHANNEL);
+  Radio.openReadingPipe (1, RF24_SENSOR_PIPE);
+  Radio.openWritingPipe (RF24_BROADCAST_PIPE);
+  Radio.printDetails ();
+  Radio.startListening();
   
   //
   // Setup other stuff
   //
   
-  memset (Nodes, 0, sizeof (Nodes));
+  memset (Sensors, 0, sizeof (Sensors));
   
   //
   // ncurses stuff
@@ -134,6 +186,12 @@ void setup (void) {
   
   initscr ();
   getmaxyx (stdscr, ScrRow, ScrCol);		// get the number of rows and columns 
+	
+	LogFile = fopen ("logfile.txt", "at");
+	if (LogFile == NULL) {
+		printf ("Logfile could not be opened, aborting\n");
+		exit (1);
+	}
 } 
 
 //*******************************************************************************
@@ -141,70 +199,48 @@ void setup (void) {
 //******************************************************************************* 
 
 void loop (void) {
-  static uint32_t PacketCounter = 0;
-  uint32_t Fails, Oks;
-  RF24NetworkHeader Header;        // If so, grab it and print it out
-  PayloadTemperature_t *Payload;
-  uint8_t i;
-  char s[256];
-  
-  PayloadId_t *PayloadId;
-  uint8_t Buffer[32];
-  
-  Payload = (PayloadTemperature_t *) Buffer;
-  PayloadId = (PayloadId_t *) Buffer;
+  SensorPayload_t Payload;
+  bool ScreenNeedsUpdate = false;
+	int i;
 
-  //
-  // Things that have to be done every loop pass
-  //
-  
-  Network.update ();                 // Check the network regularly
-
-  while (Network.available ()) {     // Is there anything ready for us?
-    Network.read (Header, &Buffer, sizeof (Buffer));
-    PacketCounter++;
-	mvprintw (0, 0, "Packets: %d\n", PacketCounter);
-	PrintBuffer (Buffer, sizeof (Buffer));
+  if (Radio.available ()) {
+    ScreenNeedsUpdate = true;
     
-    for (i = 0; i < NodeCount; i++) {
-      if (Header.from_node == Nodes [i].Address) {
+    Radio.read (&Payload, sizeof (SensorPayload_t));
+    
+    //
+    // Search through all the known sensors and see if this one has reported already.
+    // If found, copy the new values over the old one.
+    // If not found, add the new entry into the array of known sensors
+    //
+    
+    for (i = 0; i < SensorsCount; i++) {
+      if (Payload.SensorId == Sensors[i].Payload.SensorId) {
         break;
       }
     }
     
-    Nodes [i].Address = Header.from_node;
-    Nodes [i].BattLevel = Payload->BattLevel;
-    switch (Header.type) {
-      case RF24_TYPE_TEMP:
-        Nodes [i].Temperature [0] = Payload->Temperature [0];
-        Nodes [i].Temperature [1] = Payload->Temperature [1];
-        break;
-        
-      case RF24_TYPE_ID:
-        memcpy (Nodes [i].Id, PayloadId->Id, NODE_ID_SIZE);
-        Nodes [i].Flags = PayloadId->Flags;
-        break;
-        
-      default:
-        break;
+    memcpy (&Sensors[i].Payload, &Payload, sizeof (Payload));
+    Sensors[i].LastReport = time (NULL);
+		
+		// fprintf (LogFile, "%d %s (%s)\n", Sensors[i].LastReport, PayloadToString (i), PrintBuffer ((uint8_t *) &Payload, sizeof (Payload)));
+		fprintf (LogFile, "%d %s\n", Sensors[i].LastReport, PayloadToString (i));
+		fflush (LogFile);
+		
+    if (i == SensorsCount) {
+      SensorsCount++;
     }
-
-    if ((i == NodeCount) && (NodeCount < (MAX_NODE_COUNT - 1)))  {        // New node reporting itself
-      NodeCount++;
-    }
-
-	// LcdGotoXY (0, 0);
-	// sprintf (s, "Packets: %d nodesize %d\n", PacketCounter, NODE_ID_SIZE);
-	// lprint (s);
-	
-	for (i = 0; i < NodeCount; i++) {
-		sprintf (s, "%3.3o %*s %4.2fV %+3dC %s %s", Nodes [i].Address, NODE_ID_SIZE, Nodes [i].Id, (Nodes [i].BattLevel * 10 + 2000) / 1000.0, (((int16_t) Nodes [i].Temperature [0]) + 5) / 10, NodeBatteryType (&Nodes [i]), NodeTempSensorType (&Nodes [i]));
-		move (i + 1, 0);
-		printw ("%s\n", s);
-	}
-	refresh ();
   }
+
+	if (ScreenNeedsUpdate) {
+		for (i = 0; i < SensorsCount; i++) {
+			move (i + 1, 0);
+			printw ("%s\n", PayloadToString (i));
+		}
+		refresh ();
+	}
 }
+	
 
 //*******************************************************************************
 //*                              Main C function                                *
